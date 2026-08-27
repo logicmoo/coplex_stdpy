@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'self'">
+  <title>LLM Task Harness</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #06141a;
+      --panel: #0a2028;
+      --panel-2: #0c2932;
+      --line: #24505e;
+      --text: #d7eef2;
+      --muted: #7fa2aa;
+      --cyan: #33e6db;
+      --violet: #b79aff;
+      --amber: #f6c85f;
+      --red: #ff7e97;
+      --green: #63e6a4;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(145deg, #06141a 0%, #081a22 60%, #0b1726 100%);
+      color: var(--text);
+      font: 13px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+    button, input, select, textarea { font: inherit; }
+    button, input, select, textarea {
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      background: #071b22;
+      color: var(--text);
+    }
+    button { cursor: pointer; padding: 8px 12px; color: var(--cyan); }
+    button:hover:not(:disabled) { border-color: var(--cyan); background: #0b2b33; }
+    button:disabled { cursor: not-allowed; opacity: .45; }
+    input, select, textarea { width: 100%; padding: 8px 9px; }
+    textarea { min-height: 100px; resize: vertical; }
+    label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(5, 20, 26, .92);
+      position: sticky;
+      top: 0;
+      z-index: 3;
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 18px; color: var(--cyan); letter-spacing: .04em; }
+    h2 { font-size: 13px; color: var(--violet); text-transform: uppercase; letter-spacing: .08em; }
+    h3 { font-size: 12px; color: var(--cyan); }
+    small { color: var(--muted); }
+    .badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+    .badge { padding: 4px 7px; border: 1px solid var(--line); color: var(--muted); }
+    .badge.ok { border-color: #28745a; color: var(--green); }
+    .badge.warn { border-color: #806b33; color: var(--amber); }
+    main { display: grid; grid-template-columns: minmax(280px, .75fr) minmax(420px, 1.35fr); min-height: calc(100vh - 62px); }
+    aside, .detail { min-width: 0; padding: 14px; }
+    aside { border-right: 1px solid var(--line); }
+    .panel { border: 1px solid var(--line); background: rgba(7, 28, 35, .88); margin-bottom: 12px; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 11px; border-bottom: 1px solid var(--line); background: #12253a; }
+    .panel-body { padding: 11px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .form-grid .wide { grid-column: 1 / -1; }
+    .notice { margin: 9px 0; padding: 8px; border: 1px solid #806b33; color: var(--amber); }
+    .task-list { display: grid; gap: 6px; max-height: 47vh; overflow: auto; }
+    .task-row { display: grid; grid-template-columns: 1fr auto; gap: 5px 9px; width: 100%; text-align: left; color: var(--text); }
+    .task-row.active { border-color: var(--cyan); background: #0b2b33; }
+    .task-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .task-row small { grid-column: 1 / -1; }
+    .state { color: var(--muted); text-transform: uppercase; font-size: 10px; }
+    .state.completed { color: var(--green); }
+    .state.failed, .state.cancelled { color: var(--red); }
+    .state.waiting_approval, .state.waiting_input { color: var(--amber); }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .summary div { padding: 8px; border: 1px solid var(--line); background: #071b22; }
+    .summary b, .summary span { display: block; overflow-wrap: anywhere; }
+    .summary span { margin-top: 3px; color: var(--muted); font-size: 10px; }
+    pre { margin: 0; padding: 10px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: #05151b; border: 1px solid var(--line); color: #bfe4e8; max-height: 36vh; }
+    .answer { min-height: 76px; }
+    .events { display: grid; gap: 5px; max-height: 43vh; overflow: auto; }
+    .event { display: grid; grid-template-columns: 52px minmax(120px, .55fr) minmax(0, 1.45fr); gap: 8px; padding: 7px; border: 1px solid #183d48; background: #071b22; }
+    .event code { color: var(--violet); }
+    .event span:last-child { color: var(--muted); overflow-wrap: anywhere; }
+    .approval { padding: 9px; border: 1px solid #806b33; background: #251f13; margin-bottom: 8px; }
+    .approval-actions { display: flex; gap: 7px; margin-top: 8px; }
+    .danger { color: var(--red); border-color: #70404a; }
+    .empty { padding: 18px; text-align: center; color: var(--muted); }
+    .error { color: var(--red); }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 7px; }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); }
+      .summary { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>LLM Task Harness</h1>
+      <small>Repository coding-task console · real durable tasks and events</small>
+    </div>
+    <div class="badges">
+      <span id="execution-badge" class="badge">loading policy</span>
+      <span id="provider-badge" class="badge">loading provider</span>
+      <button id="refresh" type="button">Refresh</button>
+    </div>
+  </header>
+  <main>
+    <aside>
+      <section class="panel">
+        <div class="panel-head"><h2>New task</h2><span id="submit-state" class="state"></span></div>
+        <form id="task-form" class="panel-body form-grid">
+          <label class="wide">Task
+            <textarea id="task" required placeholder="Describe the repository work and expected verification."></textarea>
+          </label>
+          <label>Task root
+            <input id="root" value="." required>
+          </label>
+          <label>Model
+            <input id="model" list="models" autocomplete="off">
+            <datalist id="models"></datalist>
+          </label>
+          <label>Permission profile
+            <select id="permission">
+              <option value="read-only">read-only</option>
+              <option value="workspace-write" selected>workspace-write</option>
+              <option value="full-access">full-access</option>
+            </select>
+          </label>
+          <label>Approval mode
+            <select id="approval">
+              <option value="on-request" selected>on-request</option>
+              <option value="deny">deny risky tools</option>
+              <option value="never">auto-allow in profile</option>
+            </select>
+          </label>
+          <div id="disabled-notice" class="notice wide" hidden>Execution is disabled. Enable it on the plugin configuration page before submitting tasks.</div>
+          <button id="submit" class="wide" type="submit">Queue task</button>
+        </form>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>Durable tasks</h2><span id="task-count" class="state">0</span></div>
+        <div id="task-list" class="panel-body task-list"><div class="empty">No stored tasks.</div></div>
+      </section>
+    </aside>
+    <section class="detail">
+      <div id="no-selection" class="panel"><div class="empty">Select or submit a task to inspect its state.</div></div>
+      <div id="task-detail" hidden>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Selected task</h2>
+            <div class="toolbar"><button id="cancel" class="danger" type="button">Cancel</button></div>
+          </div>
+          <div class="panel-body">
+            <div id="task-summary" class="summary"></div>
+            <h3 style="margin:12px 0 6px">Request</h3>
+            <pre id="task-request"></pre>
+            <h3 style="margin:12px 0 6px">Answer / failure</h3>
+            <pre id="task-answer" class="answer"></pre>
+          </div>
+        </section>
+        <section id="controls-panel" class="panel" hidden>
+          <div class="panel-head"><h2>Task needs attention</h2></div>
+          <div id="controls" class="panel-body"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Ordered events</h2><span id="event-count" class="state">0</span></div>
+          <div id="events" class="panel-body events"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script>
+    const API = "/coplex_stdpy";
+    const terminal = new Set(["completed", "failed", "cancelled", "interrupted"]);
+    let selectedTaskId = null;
+    let executionEnabled = false;
+    let polling = false;
+    let defaultsApplied = false;
+
+    const byId = (id) => document.getElementById(id);
+    const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
+    })[char]);
+    const jsonText = (value) => JSON.stringify(value ?? {}, null, 2);
+
+    async function api(path, options = {}) {
+      const response = await fetch(`${API}${path}`, {
+        ...options,
+        headers: {"Content-Type": "application/json", ...(options.headers || {})},
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || payload.detail || `${response.status} ${response.statusText}`);
+      return payload;
+    }
+
+    function showError(error) {
+      byId("submit-state").textContent = error instanceof Error ? error.message : String(error);
+      byId("submit-state").className = "state failed";
+    }
+
+    async function loadSummary() {
+      const summary = await api("");
+      executionEnabled = Boolean(summary.executionEnabled);
+      byId("execution-badge").textContent = executionEnabled ? "execution enabled" : "execution disabled";
+      byId("execution-badge").className = `badge ${executionEnabled ? "warn" : "ok"}`;
+      byId("provider-badge").textContent = `${summary.defaultModel || "no model"} · ${summary.modelBaseUrl || "no endpoint"}`;
+      byId("submit").disabled = !executionEnabled;
+      byId("disabled-notice").hidden = executionEnabled;
+      if (!byId("model").value) byId("model").value = summary.defaultModel || "";
+      const ranks = {"read-only": 0, "workspace-write": 1, "full-access": 2};
+      const maximum = ranks[summary.maximumPermissionProfile] ?? ranks["workspace-write"];
+      [...byId("permission").options].forEach((option) => {
+        option.disabled = (ranks[option.value] ?? 99) > maximum;
+      });
+      byId("approval").querySelector('option[value="never"]').disabled = !summary.allowApprovalNever;
+      if (!defaultsApplied) {
+        if (summary.defaultPermissionProfile) byId("permission").value = summary.defaultPermissionProfile;
+        if (summary.defaultApprovalMode) byId("approval").value = summary.defaultApprovalMode;
+        defaultsApplied = true;
+      }
+    }
+
+    async function loadModels() {
+      try {
+        const payload = await api("/models");
+        byId("models").replaceChildren(...(payload.data || []).map((model) => {
+          const option = document.createElement("option");
+          option.value = model.id || "";
+          return option;
+        }));
+      } catch {
+        // The task console remains usable with a manually entered model.
+      }
+    }
+
+    function renderTaskList(tasks) {
+      byId("task-count").textContent = String(tasks.length);
+      const list = byId("task-list");
+      if (!tasks.length) {
+        list.innerHTML = '<div class="empty">No stored tasks.</div>';
+        return;
+      }
+      list.innerHTML = tasks.map((task) => `
+        <button class="task-row ${task.id === selectedTaskId ? "active" : ""}" data-task-id="${escapeHtml(task.id)}" type="button">
+          <span>${escapeHtml(task.task)}</span>
+          <b class="state ${escapeHtml(task.status)}">${escapeHtml(task.status)}</b>
+          <small>${escapeHtml(task.model)} · ${new Date(task.updatedAt * 1000).toLocaleString()}</small>
+        </button>`).join("");
+      list.querySelectorAll("[data-task-id]").forEach((button) => {
+        button.addEventListener("click", () => selectTask(button.dataset.taskId));
+      });
+    }
+
+    async function loadTasks() {
+      const payload = await api("/tasks?limit=200");
+      const tasks = payload.tasks || [];
+      if (!selectedTaskId && tasks.length) selectedTaskId = tasks[0].id;
+      renderTaskList(tasks);
+      return tasks;
+    }
+
+    function renderControls(task) {
+      const pending = Object.values(task.approvals || {}).filter((approval) => approval.status === "pending");
+      const controls = byId("controls");
+      const blocks = pending.map((approval) => `
+        <div class="approval">
+          <h3>${escapeHtml(approval.tool)} · ${escapeHtml(approval.risk)}</h3>
+          <small>Call ${escapeHtml(approval.callId)}</small>
+          <pre>${escapeHtml(jsonText(approval.arguments))}</pre>
+          <div class="approval-actions">
+            <button data-decision="allow" data-call-id="${escapeHtml(approval.callId)}" type="button">Allow</button>
+            <button class="danger" data-decision="deny" data-call-id="${escapeHtml(approval.callId)}" type="button">Deny</button>
+          </div>
+        </div>`);
+      if (task.pendingInput) {
+        blocks.push(`
+          <form id="input-form" class="approval">
+            <h3>Human input requested</h3>
+            <p>${escapeHtml(task.pendingInput.prompt)}</p>
+            <textarea id="input-response" required placeholder="Response for the running task"></textarea>
+            <div class="approval-actions"><button type="submit">Send response</button></div>
+          </form>`);
+      }
+      controls.innerHTML = blocks.join("");
+      byId("controls-panel").hidden = blocks.length === 0;
+      controls.querySelectorAll("[data-decision]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          button.disabled = true;
+          try {
+            await api(`/tasks/${encodeURIComponent(task.id)}/approvals/${encodeURIComponent(button.dataset.callId)}`, {
+              method: "POST", body: JSON.stringify({decision: button.dataset.decision}),
+            });
+            await refreshSelected();
+          } catch (error) { showError(error); }
+        });
+      });
+      const inputForm = byId("input-form");
+      if (inputForm) inputForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        try {
+          await api(`/tasks/${encodeURIComponent(task.id)}/input`, {
+            method: "POST", body: JSON.stringify({response: byId("input-response").value}),
+          });
+          await refreshSelected();
+        } catch (error) { showError(error); }
+      });
+    }
+
+    function renderEvents(events) {
+      byId("event-count").textContent = String(events.length);
+      byId("events").innerHTML = events.length ? events.map((event) => {
+        const details = {...event};
+        delete details.sequence; delete details.event; delete details.timestamp; delete details.taskId;
+        return `<div class="event"><b>#${escapeHtml(event.sequence)}</b><code>${escapeHtml(event.event)}</code><span>${escapeHtml(jsonText(details))}</span></div>`;
+      }).join("") : '<div class="empty">No events recorded.</div>';
+    }
+
+    async function refreshSelected() {
+      if (!selectedTaskId) return;
+      const id = encodeURIComponent(selectedTaskId);
+      const [task, eventPayload] = await Promise.all([api(`/tasks/${id}`), api(`/tasks/${id}/events`)]);
+      byId("no-selection").hidden = true;
+      byId("task-detail").hidden = false;
+      byId("task-summary").innerHTML = [
+        ["Status", task.status], ["Model", task.model], ["Profile", task.permissionProfile], ["Root", task.root]
+      ].map(([label, value]) => `<div><b class="state ${escapeHtml(task.status)}">${escapeHtml(value)}</b><span>${escapeHtml(label)}</span></div>`).join("");
+      byId("task-request").textContent = task.task || "";
+      byId("task-answer").textContent = task.error ? `ERROR: ${task.error}` : (task.answer || "No final answer yet.");
+      byId("task-answer").className = `answer ${task.error ? "error" : ""}`;
+      byId("cancel").disabled = terminal.has(task.status) || Boolean(task.cancelRequested);
+      renderControls(task);
+      renderEvents(eventPayload.events || []);
+    }
+
+    async function selectTask(taskId) {
+      selectedTaskId = taskId;
+      await Promise.all([loadTasks(), refreshSelected()]);
+    }
+
+    async function refreshAll() {
+      if (polling) return;
+      polling = true;
+      try {
+        await loadSummary();
+        await loadTasks();
+        await refreshSelected();
+      } catch (error) {
+        showError(error);
+      } finally {
+        polling = false;
+      }
+    }
+
+    byId("task-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      byId("submit").disabled = true;
+      byId("submit-state").textContent = "queueing";
+      try {
+        const task = await api("/tasks", {
+          method: "POST",
+          body: JSON.stringify({
+            task: byId("task").value,
+            root: byId("root").value,
+            model: byId("model").value,
+            permissionProfile: byId("permission").value,
+            approvalMode: byId("approval").value,
+          }),
+        });
+        selectedTaskId = task.id;
+        byId("task").value = "";
+        byId("submit-state").textContent = "queued";
+        byId("submit-state").className = "state completed";
+        await refreshAll();
+      } catch (error) {
+        showError(error);
+      } finally {
+        byId("submit").disabled = !executionEnabled;
+      }
+    });
+
+    byId("cancel").addEventListener("click", async () => {
+      if (!selectedTaskId) return;
+      try {
+        await api(`/tasks/${encodeURIComponent(selectedTaskId)}/cancel`, {method: "POST", body: "{}"});
+        await refreshAll();
+      } catch (error) { showError(error); }
+    });
+    byId("refresh").addEventListener("click", refreshAll);
+
+    void loadModels();
+    void refreshAll();
+    window.setInterval(() => { if (!document.hidden) void refreshAll(); }, 1500);
+  </script>
+</body>
+</html>

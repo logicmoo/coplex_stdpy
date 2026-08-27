@@ -1,0 +1,128 @@
+{
+  "id": "coplex_stdpy",
+  "label": "CoplexStdPy (LLM Task Harness)",
+  "description": "Provider-neutral, Codex/Copilot-style repository task runtime with scoped tools, durable events, approvals, cancellation, and iterative read-only subagents.",
+  "summary": "Configure the coding-task runtime, inspect its capability registry, and run explicitly enabled repository tasks through an OpenAI-compatible model endpoint.",
+  "version": "0.1.0",
+  "entrypoint": "plugin.py",
+  "scan": "startup",
+  "routePrefix": "/coplex_stdpy",
+  "adminPage": "/coplex_stdpy/admin",
+  "servicesEndpoint": {
+    "path": "/api/plugins/coplex_stdpy/endpoints",
+    "description": "Workbench enumerator of the harness router's registered routes (identical routes are mirrored by the standalone process on port 8850)."
+  },
+  "docs": "README.md",
+  "kind": "custom",
+  "executionEnabled": false,
+  "modelBaseUrl": "http://127.0.0.1:8801/v1",
+  "defaultModel": "yourself/same",
+  "apiKeyEnv": "OPENAI_API_KEY",
+  "defaultPermissionProfile": "workspace-write",
+  "maximumPermissionProfile": "workspace-write",
+  "defaultApprovalMode": "on-request",
+  "allowApprovalNever": false,
+  "allowToolNetwork": false,
+  "allowedHosts": [],
+  "maxWorkers": 2,
+  "maxSteps": 50,
+  "modelTimeoutSeconds": 120,
+  "taskTimeoutSeconds": 1800,
+  "plugin-install": {
+    "requires": [
+      "fastapi",
+      "httpx",
+      "psutil"
+    ],
+    "install": "python -m pip install -e \".[test,debugger]\"",
+    "files": [
+      {
+        "path": "__init__.py",
+        "description": "Public Python API exported from the canonical plugin package."
+      },
+      {
+        "path": "runtime.py",
+        "description": "Provider-neutral task loop, guarded tools, adapters, and durable task manager."
+      },
+      {
+        "path": "plugin.py",
+        "description": "Workbench plugin entrypoint and HTTP/admin routes."
+      },
+      {
+        "path": "README.md",
+        "description": "Security boundary, API contract, and usage guide."
+      },
+      {
+        "path": "static/console.html",
+        "description": "Same-origin task console for tasks, events, approvals, input, and cancellation."
+      }
+    ],
+    "steps": [
+      "Install the repository test and debugger dependencies.",
+      "Confirm the configured OpenAI-compatible model endpoint is reachable.",
+      "Review the permission and approval defaults before enabling task execution.",
+      "Use an OS sandbox when model output is not fully trusted."
+    ]
+  },
+  "plugin-uninstall": {
+    "uninstall": null,
+    "steps": [
+      "Disable task execution (executionEnabled: false) and stop any in-flight tasks before removing.",
+      "Remove the canonical workbench/plugins/coplex_stdpy directory and reinstall the repository package; durable runtime/coplex_stdpy task records are intentionally separate."
+    ]
+  },
+  "plugin-init": [
+    {
+      "command": "web_proxy",
+      "description": "Redirects /coplex_stdpy to the standalone harness server (same routes as the embedded router, on its own port).",
+      "redirect": "http://127.0.0.1:8850",
+      "path": "/coplex_stdpy"
+    }
+  ],
+  "plugin-lifecycle": {
+    "standalone": true,
+    "hooks": {
+      "install": null,
+      "installAfter": null,
+      "uninstall": null,
+      "uninstallAfter": null,
+      "workbenchStartup": "initialize",
+      "workbenchStartupAfter": null,
+      "workbenchShutdown": null,
+      "workbenchShutdownAfter": null,
+      "workspaceStartup": null,
+      "workspaceStartupAfter": null,
+      "workspaceShutdown": null,
+      "workspaceShutdownAfter": null
+    },
+    "note": "Dual-mode: the embedded router always registers on the workbench, and by default (COPLEX_STDPY_PLUGIN_MODE=standalone) create_router also launches a detached standalone process serving the same routes on port 8850 (COPLEX_STDPY_HTTP_PORT) behind the /coplex_stdpy web_proxy mount, so the harness survives workbench restarts. Set COPLEX_STDPY_PLUGIN_MODE=embedded for in-process only."
+  },
+  "plugin-api": {
+    "status": { "method": "GET", "path": "/coplex_stdpy/health", "description": "Liveness check." },
+    "config": { "method": "PUT", "path": "/coplex_stdpy/admin/settings", "description": "Write executionEnabled/permission/approval/model settings." },
+    "restart": null,
+    "shutdown": null,
+    "note": "The embedded router has nothing to restart/shutdown independently of the workbench API process; the standalone mirror on port 8850 is stopped/started like any OS process. /coplex_stdpy/tasks/{task_id}/cancel stops one running task, not the plugin itself."
+  },
+  "ui": {
+    "pages": [
+      {
+        "id": "task-console",
+        "label": "LLM Task Harness",
+        "kind": "task-console",
+        "descriptor": "/coplex_stdpy/ui",
+        "external": true,
+        "glyph": "⌘",
+        "group": "RUNTIME"
+      },
+      {
+        "id": "configure",
+        "label": "Configure LLM Task Harness",
+        "kind": "configure",
+        "descriptor": "/coplex_stdpy/admin",
+        "glyph": "⌘",
+        "group": "CAPABILITIES"
+      }
+    ]
+  }
+}

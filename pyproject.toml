@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coplex_stdpy"
+version = "0.1.0"
+description = "Provider-neutral, Codex/Copilot-style repository task runtime with scoped tools, durable events, approvals, cancellation, and iterative read-only subagents."
+readme = "README.md"
+license = { text = "LGPL-2.1-only" }
+requires-python = ">=3.10"
+authors = [{ name = "LogicMOO" }]
+keywords = [
+    "agent",
+    "codex",
+    "copilot",
+    "fastapi",
+    "llm",
+    "task-harness",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "fastapi>=0.100",
+    "httpx>=0.24",
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+server = ["uvicorn>=0.23"]
+test = ["pytest>=7"]
+dev = ["pytest>=7", "build>=1.0"]
+
+[project.urls]
+Homepage = "https://github.com/logicmoo/coplex_stdpy"
+Documentation = "https://github.com/logicmoo/coplex_stdpy/tree/main/docs"
+Issues = "https://github.com/logicmoo/coplex_stdpy/issues"
+
+[project.scripts]
+coplex-stdpy-server = "coplex_stdpy.standalone:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+coplex_stdpy = ["static/*.html", "plugin.json"]

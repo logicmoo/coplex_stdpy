@@ -44,21 +44,21 @@ def test_harness_constructs_and_closes() -> None:
         assert agent.closed is True
 
 
-def test_plugin_module_imports_without_plugin_admin() -> None:
-    """``coplex_stdpy.plugin`` must import even outside a plugin host."""
+def test_server_module_imports_without_plugin_admin() -> None:
+    """``coplex_stdpy.server`` must import even outside a plugin host."""
 
-    from coplex_stdpy import plugin
+    from coplex_stdpy import server
 
-    assert plugin.PLUGIN_ID == "coplex_stdpy"
-    if not plugin._HAVE_PLUGIN_ADMIN:
+    assert server.PLUGIN_ID == "coplex_stdpy"
+    if not server._HAVE_PLUGIN_ADMIN:
         with pytest.raises(RuntimeError):
-            plugin.initialization_report({})
+            server.initialization_report({})
 
 
 def test_create_router_works_standalone() -> None:
-    from coplex_stdpy import plugin
+    from coplex_stdpy import server
 
-    router = plugin.create_router({"executionEnabled": False})
+    router = server.create_router({"executionEnabled": False})
     paths = {route.path for route in router.routes}
     assert "/coplex_stdpy" in paths
     assert "/coplex_stdpy/health" in paths
@@ -66,7 +66,7 @@ def test_create_router_works_standalone() -> None:
 
 
 def test_repository_root_defaults_to_cwd(monkeypatch) -> None:
-    from coplex_stdpy import plugin
+    from coplex_stdpy import server
 
     monkeypatch.delenv("COPLEX_STDPY_REPOSITORY_ROOT", raising=False)
     original_cwd = Path.cwd()
@@ -74,7 +74,7 @@ def test_repository_root_defaults_to_cwd(monkeypatch) -> None:
         cwd = Path(tmp).resolve()
         try:
             monkeypatch.chdir(cwd)
-            assert plugin._repository_root({}) == cwd
+            assert server._repository_root({}) == cwd
         finally:
             # Restore cwd before the temp dir cleanup below runs: Windows
             # cannot remove a directory that is still a process's cwd.
@@ -82,9 +82,30 @@ def test_repository_root_defaults_to_cwd(monkeypatch) -> None:
 
 
 def test_repository_root_honors_explicit_override(monkeypatch) -> None:
-    from coplex_stdpy import plugin
+    from coplex_stdpy import server
 
     with tempfile.TemporaryDirectory() as tmp:
         target = Path(tmp).resolve()
         monkeypatch.setenv("COPLEX_STDPY_REPOSITORY_ROOT", str(target))
-        assert plugin._repository_root({}) == target
+        assert server._repository_root({}) == target
+
+
+def test_root_plugin_shim_loads_by_file_path_like_the_workbench_does() -> None:
+    """The Workbench loads ``plugin.py`` directly by file path (per
+    ``plugin.json``'s ``entrypoint``), not as a package import. Reproduce
+    that exact mechanism here instead of a plain ``import plugin``.
+    """
+
+    import importlib.util
+
+    repo_root = Path(__file__).resolve().parents[1]
+    plugin_path = repo_root / "plugin.py"
+    spec = importlib.util.spec_from_file_location("coplex_stdpy_workbench_entry", plugin_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.PLUGIN_ID == "coplex_stdpy"
+    router = module.create_router({"executionEnabled": False})
+    paths = {route.path for route in router.routes}
+    assert "/coplex_stdpy/health" in paths

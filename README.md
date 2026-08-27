@@ -6,17 +6,24 @@ plan, edit files, apply patches, run focused commands and tests, inspect Git,
 ask for human input, delegate bounded read-only analysis, and report verified
 results.
 
-It is split into two internal layers:
+It is split into two layers, matching the layout used by the other Workbench
+plugins (`emullm`, `mailbox_chat`):
 
-- `runtime.py`, exported through `__init__.py`, is the reusable Python API. It
-  provides `LLMTaskHarness`, the compatible `CodexHarness` alias,
-  `OpenAICompatibleAdapter`, and `HarnessTaskManager`. This layer has no
-  dependency on any particular host application.
-- `plugin.py`, `plugin.json`, and `static/console.html` publish a FastAPI HTTP
-  task API, a same-origin task console, and durable task/event integration.
-  `create_router()` works standalone; the native administration page
-  additionally needs a `plugin_admin` module supplied by a compatible plugin
-  host (for example the LogicMOO Workbench) and is optional otherwise.
+- `src/coplex_stdpy/` is the installable package: `runtime.py`, exported
+  through `__init__.py`, is the reusable Python API (`LLMTaskHarness`, the
+  compatible `CodexHarness` alias, `OpenAICompatibleAdapter`,
+  `HarnessTaskManager`) with no dependency on any particular host
+  application; `server.py` builds the FastAPI HTTP task API and
+  `static/console.html` is the same-origin task console; `standalone.py`
+  runs that FastAPI app as its own process.
+- `plugin.py` and `plugin.json`, at the repository root, are the Workbench
+  plugin entrypoint and manifest. A compatible plugin host loads `plugin.py`
+  directly by file path and calls `create_router(manifest)` /
+  `initialize(manifest)`; `plugin.py` adds `src/` to `sys.path` so
+  `coplex_stdpy` is importable even without a prior `pip install`, then
+  delegates to `coplex_stdpy.server`. The native Workbench administration
+  page additionally needs a `plugin_admin` module supplied by that host and
+  is optional otherwise — `create_router()` itself always works standalone.
 
 ## Installation
 
@@ -26,7 +33,8 @@ pip install coplex_stdpy
 pip install "coplex_stdpy[server]"
 ```
 
-To install from a source checkout instead:
+To install from a source checkout instead (recommended when this repository
+is used as a Workbench plugin — see `plugin.json`'s `plugin-install.install`):
 
 ```powershell
 pip install -e ".[server,test]"
@@ -38,7 +46,7 @@ pip install -e ".[server,test]"
 python -m coplex_stdpy.standalone [host] [port]
 ```
 
-This serves the same FastAPI router as `coplex_stdpy.plugin.create_router()`
+This serves the same FastAPI router as `coplex_stdpy.server.create_router()`
 on its own port (default `127.0.0.1:8850`), so it can be driven directly or
 mounted behind a reverse proxy.
 
@@ -139,7 +147,7 @@ internals. See [Codex CLI](https://learn.chatgpt.com/docs/codex/cli).
 
 ## HTTP API
 
-`create_router()` (in `coplex_stdpy.plugin`) builds these routes. Mount it in
+`create_router()` (in `coplex_stdpy.server`) builds these routes. Mount it in
 your own FastAPI app, or run `python -m coplex_stdpy.standalone` to serve them
 directly:
 
@@ -234,7 +242,9 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m build
 ```
 
-`plugin.py`'s `create_router()` works in this environment without any
-extra setup. `initialize()` and `create_admin_router()` additionally need a
-`plugin_admin` module supplied by a compatible plugin host and will raise a
-clear `RuntimeError` if that host is not present.
+`coplex_stdpy.server`'s `create_router()` works in this environment without
+any extra setup. `initialize()` and `create_admin_router()` additionally need
+a `plugin_admin` module supplied by a compatible plugin host and will raise a
+clear `RuntimeError` if that host is not present. The repository-root
+`plugin.py` shim (loaded directly by that host, per `plugin.json`) delegates
+to the same module.

@@ -34,31 +34,35 @@
       "httpx",
       "psutil"
     ],
-    "install": "python -m pip install -e \".[test,debugger]\"",
+    "install": "python -m pip install -e \".[server,test]\"",
     "files": [
       {
-        "path": "__init__.py",
-        "description": "Public Python API exported from the canonical plugin package."
+        "path": "plugin.py",
+        "description": "Workbench plugin entrypoint: adds src/ to sys.path and delegates to coplex_stdpy.server."
       },
       {
-        "path": "runtime.py",
+        "path": "src/coplex_stdpy/__init__.py",
+        "description": "Public Python API exported from the installable coplex_stdpy package."
+      },
+      {
+        "path": "src/coplex_stdpy/runtime.py",
         "description": "Provider-neutral task loop, guarded tools, adapters, and durable task manager."
       },
       {
-        "path": "plugin.py",
-        "description": "Workbench plugin entrypoint and HTTP/admin routes."
+        "path": "src/coplex_stdpy/server.py",
+        "description": "FastAPI HTTP/admin routes consumed by plugin.py and coplex_stdpy.standalone."
       },
       {
         "path": "README.md",
         "description": "Security boundary, API contract, and usage guide."
       },
       {
-        "path": "static/console.html",
+        "path": "src/coplex_stdpy/static/console.html",
         "description": "Same-origin task console for tasks, events, approvals, input, and cancellation."
       }
     ],
     "steps": [
-      "Install the repository test and debugger dependencies.",
+      "Install the package in editable mode: pip install -e \".[server,test]\".",
       "Confirm the configured OpenAI-compatible model endpoint is reachable.",
       "Review the permission and approval defaults before enabling task execution.",
       "Use an OS sandbox when model output is not fully trusted."

@@ -49,8 +49,17 @@ Issues = "https://github.com/logicmoo/coplex_stdpy/issues"
 [project.scripts]
 coplex-stdpy-server = "coplex_stdpy.standalone:main"
 
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-coplex_stdpy = ["static/*.html", "plugin.json"]
+coplex_stdpy = ["static/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"

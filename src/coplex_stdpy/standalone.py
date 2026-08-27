@@ -56,18 +56,22 @@ def is_listening(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, timeout: fl
 def build_app():
     """Build a FastAPI app hosting the plugin's full router."""
 
-    from . import plugin as _plugin
+    from . import server as _server
 
     manifest: dict[str, Any] = {}
-    manifest_path = _HERE / "plugin.json"
-    if manifest_path.is_file():
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    # plugin.json is repo-root-only (not shipped inside the installed
+    # package): pick it up when running from a source checkout, but a
+    # plain "pip install coplex_stdpy" works fine with the {} default.
+    for manifest_path in (_HERE / "plugin.json", _HERE.parents[1] / "plugin.json"):
+        if manifest_path.is_file():
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            break
     manifest["path"] = str(_HERE)
 
     from fastapi import FastAPI
 
     app = FastAPI(title="LLM Task Harness (standalone)")
-    app.include_router(_plugin.create_router(manifest))
+    app.include_router(_server.create_router(manifest))
 
     @app.get("/health")
     def health() -> dict[str, Any]:

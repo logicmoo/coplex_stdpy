@@ -2,10 +2,12 @@
 
 ## Layering
 
-`coplex_stdpy` is split into three layers inside one plugin directory.
-Each layer only ever calls the layer directly below it:
+`coplex_stdpy` is split into three layers: `src/coplex_stdpy/` (the
+installable package) plus a thin repository-root `plugin.py` shim used by a
+Workbench-style host. Each layer only ever calls the layer directly below it:
 
-- `plugin.py` never touches an `LLMTaskHarness` instance directly — only
+- `server.py` (loaded via the repository-root `plugin.py` shim) never
+  touches an `LLMTaskHarness` instance directly — only
   `HarnessTaskManager`'s public methods (`submit`, `list`, `get`, `events`,
   `cancel`, `decide_approval`, `provide_input`, `capabilities`, `models`).
 - `HarnessTaskManager` never touches FastAPI, HTTP, or the Workbench
@@ -16,11 +18,12 @@ Each layer only ever calls the layer directly below it:
   callable it was constructed with.
 
 ```
-plugin.py (FastAPI router + admin descriptor)
-    -> HarnessTaskManager (durable async orchestration)
-        -> LLMTaskHarness (one per task, one per subagent)
-            -> tool registry (built-in + dynamically registered)
-            -> OpenAICompatibleAdapter (or any other adapter callable)
+plugin.py (repo-root Workbench shim)
+    -> coplex_stdpy.server (FastAPI router + admin descriptor)
+        -> HarnessTaskManager (durable async orchestration)
+            -> LLMTaskHarness (one per task, one per subagent)
+                -> tool registry (built-in + dynamically registered)
+                -> OpenAICompatibleAdapter (or any other adapter callable)
 ```
 
 ![System architecture](images/01-system-architecture.png)
@@ -43,7 +46,7 @@ Why this split matters in practice:
   read through explicit `dict.get(...)` calls with type coercion, never
   passed through verbatim, and every manager call is wrapped so that
   `KeyError`/`PermissionError`/`ValueError`/etc. become the right HTTP
-  status via `_http_error()` in `plugin.py`.
+  status via `_http_error()` in `server.py`.
 
 ## Process and thread model
 

@@ -1,8 +1,9 @@
 # 05 — Task manager and HTTP API
 
 `HarnessTaskManager` turns the synchronous `LLMTaskHarness.run()` call into
-a durable, asynchronous, approval-gated task, and `plugin.py` exposes it as
-a Workbench FastAPI router plus a native admin settings page.
+a durable, asynchronous, approval-gated task, and `coplex_stdpy.server`
+(loaded via the repository-root `plugin.py` shim) exposes it as a Workbench
+FastAPI router plus a native admin settings page.
 
 ## Submission and policy enforcement
 
@@ -106,7 +107,7 @@ pending item, and both explicitly reject decisions against a task that is
 already terminal or already cancel-requested — an approval can't be
 granted after the fact to a task that has already moved on.
 
-## HTTP API (`plugin.py`)
+## HTTP API (`coplex_stdpy/server.py`)
 
 All routes are mounted under the manifest's `routePrefix`
 (`/coplex_stdpy`) and every manager call is wrapped so that

@@ -15,7 +15,7 @@ import asyncio
 import os
 import re
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from fastapi import APIRouter, Body, HTTPException, Query, status as http_status
 from fastapi.responses import HTMLResponse
@@ -57,6 +57,38 @@ _CONSOLE_PAGE = _HERE / "static" / "console.html"
 PLUGIN_ID = "coplex_stdpy"
 _manager: HarnessTaskManager | None = None
 _manifest: dict[str, Any] = {}
+
+# Real OS-process shutdown/restart is only meaningful for whichever process
+# actually owns the running ASGI server (uvicorn.Server). create_router()
+# has no such handle by itself -- it may be embedded inside a much larger
+# host application (for example the LogicMOO Workbench) that must never be
+# taken down by a request to *this* plugin's routes. coplex_stdpy.standalone
+# registers real hooks here after it constructs its own uvicorn.Server; an
+# embedding host may register its own via register_process_control() if it
+# wants /admin/shutdown and /admin/restart to control its process too.
+# Left unregistered (the default), both routes answer 501.
+_process_control: dict[str, Callable[[], Any] | None] = {"shutdown": None, "restart": None}
+
+
+def register_process_control(
+    *,
+    shutdown: Callable[[], Any] | None = None,
+    restart: Callable[[], Any] | None = None,
+) -> None:
+    """Register real process-lifecycle hooks for ``/admin/shutdown`` and
+    ``/admin/restart``.
+
+    Only call this from code that actually owns the OS process serving this
+    router (see :mod:`coplex_stdpy.standalone`). Each hook is called with no
+    arguments from within the request handler and should return quickly;
+    do the actual stop/respawn work asynchronously (a background thread,
+    for example) so the HTTP response can still be sent.
+    """
+
+    if shutdown is not None:
+        _process_control["shutdown"] = shutdown
+    if restart is not None:
+        _process_control["restart"] = restart
 
 
 def _repository_root(manifest: Mapping[str, Any]) -> Path:
@@ -243,6 +275,10 @@ def create_router(manifest: dict[str, Any] | None = None) -> APIRouter:
             ),
             "defaultApprovalMode": str(manager.settings.get("defaultApprovalMode") or "on-request"),
             "allowApprovalNever": bool(manager.settings.get("allowApprovalNever", False)),
+            "processControlAvailable": {
+                "shutdown": _process_control.get("shutdown") is not None,
+                "restart": _process_control.get("restart") is not None,
+            },
             "taskCounts": {
                 state: sum(task["status"] == state for task in tasks)
                 for state in sorted({task["status"] for task in tasks})
@@ -255,6 +291,8 @@ def create_router(manifest: dict[str, Any] | None = None) -> APIRouter:
                 "tasks": f"/{PLUGIN_ID}/tasks",
                 "ui": f"/{PLUGIN_ID}",
                 "admin": f"/{PLUGIN_ID}/admin",
+                "adminShutdown": f"/{PLUGIN_ID}/admin/shutdown",
+                "adminRestart": f"/{PLUGIN_ID}/admin/restart",
             },
         }
 
@@ -334,6 +372,34 @@ def create_router(manifest: dict[str, Any] | None = None) -> APIRouter:
             return _task_manager().provide_input(task_id, str(body.get("response") or ""))
         except Exception as error:  # noqa: BLE001
             raise _http_error(error) from error
+
+    @router.post("/admin/shutdown")
+    def request_shutdown() -> dict[str, Any]:
+        hook = _process_control.get("shutdown")
+        if hook is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_501_NOT_IMPLEMENTED,
+                detail=(
+                    "process-level shutdown is unavailable: this process did not "
+                    "register a shutdown hook (only coplex_stdpy.standalone does)"
+                ),
+            )
+        hook()
+        return {"ok": True, "action": "shutdown"}
+
+    @router.post("/admin/restart")
+    def request_restart() -> dict[str, Any]:
+        hook = _process_control.get("restart")
+        if hook is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_501_NOT_IMPLEMENTED,
+                detail=(
+                    "process-level restart is unavailable: this process did not "
+                    "register a restart hook (only coplex_stdpy.standalone does)"
+                ),
+            )
+        hook()
+        return {"ok": True, "action": "restart"}
 
     return router
 
@@ -559,4 +625,10 @@ def resolve_ui_pages(
     return resolved
 
 
-__all__ = ["create_admin_router", "create_router", "initialize", "resolve_ui_pages"]
+__all__ = [
+    "create_admin_router",
+    "create_router",
+    "initialize",
+    "register_process_control",
+    "resolve_ui_pages",
+]

@@ -64,6 +64,8 @@ def test_create_router_works_standalone() -> None:
     assert "/coplex_stdpy/endpoints" in paths
     assert "/coplex_stdpy/health" in paths
     assert "/coplex_stdpy/tasks" in paths
+    assert "/coplex_stdpy/admin/shutdown" in paths
+    assert "/coplex_stdpy/admin/restart" in paths
 
 
 def test_bare_root_serves_console_and_endpoints_serves_summary() -> None:
@@ -94,6 +96,71 @@ def test_bare_root_serves_console_and_endpoints_serves_summary() -> None:
 
         # The old /ui route is gone now that it moved to the bare root.
         assert client.get("/coplex_stdpy/ui").status_code == 404
+
+
+def test_admin_process_control_501s_when_unregistered() -> None:
+    """Without a registered hook, /admin/shutdown and /admin/restart must
+    never silently succeed -- and must never actually touch the process
+    running the test suite.
+    """
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from coplex_stdpy import server
+
+    server._process_control["shutdown"] = None
+    server._process_control["restart"] = None
+
+    app = FastAPI()
+    app.include_router(server.create_router({"executionEnabled": False}))
+    with TestClient(app) as client:
+        shutdown = client.post("/coplex_stdpy/admin/shutdown")
+        assert shutdown.status_code == 501
+        restart = client.post("/coplex_stdpy/admin/restart")
+        assert restart.status_code == 501
+
+        summary = client.get("/coplex_stdpy/endpoints").json()
+        assert summary["processControlAvailable"] == {"shutdown": False, "restart": False}
+
+
+def test_admin_process_control_invokes_registered_hooks() -> None:
+    """register_process_control() wires real hooks in; each route calls
+    exactly its own hook and reports success.
+    """
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from coplex_stdpy import server
+
+    calls: list[str] = []
+    try:
+        server.register_process_control(
+            shutdown=lambda: calls.append("shutdown"),
+            restart=lambda: calls.append("restart"),
+        )
+
+        app = FastAPI()
+        app.include_router(server.create_router({"executionEnabled": False}))
+        with TestClient(app) as client:
+            summary = client.get("/coplex_stdpy/endpoints").json()
+            assert summary["processControlAvailable"] == {"shutdown": True, "restart": True}
+
+            shutdown = client.post("/coplex_stdpy/admin/shutdown")
+            assert shutdown.status_code == 200
+            assert shutdown.json() == {"ok": True, "action": "shutdown"}
+
+            restart = client.post("/coplex_stdpy/admin/restart")
+            assert restart.status_code == 200
+            assert restart.json() == {"ok": True, "action": "restart"}
+
+        assert calls == ["shutdown", "restart"]
+    finally:
+        # This is process-wide module state: always reset it so no other
+        # test observes a hook left over from this one.
+        server._process_control["shutdown"] = None
+        server._process_control["restart"] = None
 
 
 def test_repository_root_defaults_to_cwd(monkeypatch) -> None:

@@ -10,6 +10,10 @@ Workbench-style host. Each layer only ever calls the layer directly below it:
   touches an `LLMTaskHarness` instance directly — only
   `HarnessTaskManager`'s public methods (`submit`, `list`, `get`, `events`,
   `cancel`, `decide_approval`, `provide_input`, `capabilities`, `models`).
+  The one exception is `/admin/shutdown`/`/admin/restart`, which bypass the
+  manager entirely and instead call an OS-process-level hook registered by
+  whichever process actually owns the running server (see doc 05);
+  unregistered, both answer `501`.
 - `HarnessTaskManager` never touches FastAPI, HTTP, or the Workbench
   manifest — it only constructs and drives `LLMTaskHarness` instances and
   persists JSON/JSONL to disk.

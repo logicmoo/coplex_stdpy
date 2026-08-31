@@ -128,6 +128,34 @@ All routes are mounted under the manifest's `routePrefix`
 | `POST` | `/coplex_stdpy/tasks/{id}/cancel` | `cancel(id)`. |
 | `POST` | `/coplex_stdpy/tasks/{id}/approvals/{call_id}` | `decide_approval(id, call_id, decision)`. |
 | `POST` | `/coplex_stdpy/tasks/{id}/input` | `provide_input(id, response)`. |
+| `POST` | `/coplex_stdpy/admin/shutdown` | Calls the registered shutdown hook, if any; `501` otherwise (see below). |
+| `POST` | `/coplex_stdpy/admin/restart` | Calls the registered restart hook, if any; `501` otherwise (see below). |
+
+### Process-control hooks (`/admin/shutdown`, `/admin/restart`)
+
+`create_router()` keeps a module-level `_process_control` registry with
+`"shutdown"`/`"restart"` slots, both `None` by default — in that default
+state the two routes above always answer `501 Not Implemented`. A process
+that actually owns the running ASGI server calls
+`register_process_control(shutdown=..., restart=...)` to wire real
+behavior; this is deliberately opt-in rather than automatic, because
+`create_router()`'s router can be mounted inside a much larger host
+application (for example the Workbench API process itself), and a request
+to this plugin's own routes must never be able to take that host down.
+
+`coplex_stdpy.standalone.main()` is the one thing that registers real hooks
+automatically, since it is the process that constructs the `uvicorn.Server`:
+
+- `shutdown` sets `uvicorn.Server.should_exit = True`. uvicorn's serve loop
+  polls that flag and then runs the FastAPI app's `shutdown` event handler
+  (which closes the `HarnessTaskManager`) before the process exits — a
+  graceful stop, not a hard kill.
+- `restart` does the same on a background thread, then polls
+  `is_listening()` until the port is confirmed free and calls
+  `launch()` to spawn a fresh detached replacement process. Running this on
+  a background thread means the HTTP request that triggered it still gets
+  a `200 {"ok": true, "action": "restart"}` acknowledgement instead of a
+  connection reset mid-restart.
 
 `create_admin_router()` additionally publishes a native Workbench admin
 descriptor (`GET /coplex_stdpy/admin` for the current settings/status

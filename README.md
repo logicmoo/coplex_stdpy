@@ -165,6 +165,14 @@ directly:
 | `POST` | `/coplex_stdpy/tasks/{id}/cancel` | Request cancellation |
 | `POST` | `/coplex_stdpy/tasks/{id}/approvals/{call_id}` | Send `{"decision":"allow"}` or `deny` |
 | `POST` | `/coplex_stdpy/tasks/{id}/input` | Send `{"response":"..."}` to a waiting task |
+| `POST` | `/coplex_stdpy/admin/shutdown` | Gracefully stop the process (501 if unsupported here) |
+| `POST` | `/coplex_stdpy/admin/restart` | Gracefully restart the process (501 if unsupported here) |
+
+`/admin/shutdown` and `/admin/restart` only do something when the process
+serving the request has registered real process-control hooks via
+`coplex_stdpy.server.register_process_control()` — see
+[Process control](#process-control) below. Every other route above always
+works, in any hosting mode.
 
 Create a task after enabling execution:
 
@@ -221,6 +229,46 @@ agent.register_tool(
 Durable task state defaults to `runtime/coplex_stdpy`. Deployments and test
 runners may set `COPLEX_STDPY_STATE_DIRECTORY` to another path inside the
 repository; paths outside the repository are rejected.
+
+## Process control
+
+`POST /coplex_stdpy/admin/shutdown` and `POST /coplex_stdpy/admin/restart`
+answer **501 Not Implemented** unless the process serving the request has
+registered real hooks:
+
+```python
+from coplex_stdpy import server
+
+
+def stop_my_app():
+    ...  # e.g. set a running uvicorn.Server's should_exit = True
+
+
+def restart_my_app():
+    ...  # e.g. spawn a replacement process, then stop this one
+
+
+server.register_process_control(shutdown=stop_my_app, restart=restart_my_app)
+```
+
+This is deliberately opt-in and per-process rather than automatic: a router
+built by `create_router()` may be mounted inside a much larger host
+application (for example the LogicMOO Workbench's own API process), and a
+request to *this plugin's* routes must never be able to take the whole host
+down. `coplex_stdpy.standalone` is the one thing that registers real hooks
+out of the box, because it is the process that actually owns the running
+`uvicorn.Server`:
+
+- **shutdown** sets `uvicorn.Server.should_exit = True`, which lets uvicorn
+  run its normal graceful-shutdown sequence (including this app's `shutdown`
+  event, which closes the `HarnessTaskManager`) before the process exits.
+- **restart** does the same, then — once the port is confirmed free — spawns
+  a fresh detached process with `coplex_stdpy.standalone.launch()`. The
+  actual stop-and-respawn happens on a background thread so the HTTP request
+  gets an immediate acknowledgement rather than a reset connection.
+
+Each hook is called synchronously from within the request handler and should
+return quickly; do the real work asynchronously, as `standalone.py` does.
 
 ## Deliberate exclusions
 

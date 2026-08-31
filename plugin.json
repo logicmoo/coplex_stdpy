@@ -104,9 +104,9 @@
   "plugin-api": {
     "status": { "method": "GET", "path": "/coplex_stdpy/health", "description": "Liveness check." },
     "config": { "method": "PUT", "path": "/coplex_stdpy/admin/settings", "description": "Write executionEnabled/permission/approval/model settings." },
-    "restart": null,
-    "shutdown": null,
-    "note": "The embedded router has nothing to restart/shutdown independently of the workbench API process; the standalone mirror on port 8850 is stopped/started like any OS process. /coplex_stdpy/tasks/{task_id}/cancel stops one running task, not the plugin itself."
+    "restart": { "method": "POST", "path": "/coplex_stdpy/admin/restart", "description": "Gracefully restart the standalone harness process: spawns a fresh detached process on the same host:port, then stops this one. Answers 501 on a process that has no registered restart hook (only coplex_stdpy.standalone registers one)." },
+    "shutdown": { "method": "POST", "path": "/coplex_stdpy/admin/shutdown", "description": "Gracefully stop the standalone harness process (closes the task manager, then exits). Answers 501 on a process that has no registered shutdown hook (only coplex_stdpy.standalone registers one)." },
+    "note": "The embedded router mounted directly on the workbench API process has no shutdown/restart hook registered, by design: a request to this plugin's routes must never be able to take down the whole host process, so /admin/shutdown and /admin/restart answer 501 there. The standalone mirror on port 8850 (coplex_stdpy.standalone) registers real hooks against its own uvicorn.Server, so those two routes work there. /coplex_stdpy/tasks/{task_id}/cancel stops one running task, not the plugin itself."
   },
   "ui": {
     "pages": [

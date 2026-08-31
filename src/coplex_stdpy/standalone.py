@@ -20,6 +20,7 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -81,17 +82,59 @@ def build_app():
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Run the standalone server in the foreground."""
+    """Run the standalone server in the foreground.
+
+    Registers real ``/admin/shutdown`` and ``/admin/restart`` process-control
+    hooks (see :func:`coplex_stdpy.server.register_process_control`): this
+    process is the one that actually owns the running ``uvicorn.Server``, so
+    it is the right (and only automatically wired) place those two routes
+    can take real effect.
+    """
 
     import argparse
 
     import uvicorn
 
+    from . import server as _server
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("host", nargs="?", default=DEFAULT_HOST)
     parser.add_argument("port", nargs="?", type=int, default=DEFAULT_PORT)
     args = parser.parse_args(argv)
-    uvicorn.run(build_app(), host=args.host, port=args.port, log_level="warning")
+
+    config = uvicorn.Config(build_app(), host=args.host, port=args.port, log_level="warning")
+    uvicorn_server = uvicorn.Server(config)
+
+    def _shutdown() -> None:
+        # uvicorn's serve loop polls this flag and then runs the app's
+        # lifespan "shutdown" handlers (which closes the HarnessTaskManager)
+        # before the process exits -- a graceful stop, not a hard kill.
+        uvicorn_server.should_exit = True
+
+    def _restart() -> None:
+        def _do_restart() -> None:
+            uvicorn_server.should_exit = True
+            deadline = time.monotonic() + 20.0
+            while time.monotonic() < deadline and is_listening(args.host, args.port):
+                time.sleep(0.1)
+            launch(args.host, args.port)
+
+        # Respond to the /admin/restart request immediately; do the actual
+        # stop-then-respawn in the background so the HTTP client gets an
+        # acknowledgement instead of a connection reset mid-restart.
+        #
+        # This thread must NOT be a daemon thread. uvicorn_server.run() (in
+        # the main thread, below) returns as soon as it observes
+        # should_exit=True -- almost immediately after this thread sets it --
+        # and once main() returns there are no more statements left to run.
+        # A daemon thread gets killed outright at that point, with no
+        # guarantee it ever reached the is_listening()/launch() calls above;
+        # a plain (non-daemon) thread keeps the whole process alive until it
+        # actually finishes spawning the replacement.
+        threading.Thread(target=_do_restart, name="coplex_stdpy-restart").start()
+
+    _server.register_process_control(shutdown=_shutdown, restart=_restart)
+    uvicorn_server.run()
 
 
 def launch(

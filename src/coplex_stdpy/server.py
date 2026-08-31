@@ -213,7 +213,19 @@ def create_router(manifest: dict[str, Any] | None = None) -> APIRouter:
             _manager.close()
             _manager = None
 
-    @router.get("")
+    @router.get("", response_class=HTMLResponse, include_in_schema=False)
+    def task_console() -> HTMLResponse:
+        return HTMLResponse(
+            _CONSOLE_PAGE.read_text(encoding="utf-8"),
+            headers={
+                "Content-Security-Policy": (
+                    "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
+                    "connect-src 'self'; frame-ancestors 'self'"
+                ),
+            },
+        )
+
+    @router.get("/endpoints")
     def plugin_summary() -> dict[str, Any]:
         manager = _task_manager()
         tasks = manager.list(limit=1000)
@@ -236,26 +248,15 @@ def create_router(manifest: dict[str, Any] | None = None) -> APIRouter:
                 for state in sorted({task["status"] for task in tasks})
             },
             "links": {
+                "endpoints": f"/{PLUGIN_ID}/endpoints",
                 "health": f"/{PLUGIN_ID}/health",
                 "capabilities": f"/{PLUGIN_ID}/capabilities",
                 "models": f"/{PLUGIN_ID}/models",
                 "tasks": f"/{PLUGIN_ID}/tasks",
-                "ui": f"/{PLUGIN_ID}/ui",
+                "ui": f"/{PLUGIN_ID}",
                 "admin": f"/{PLUGIN_ID}/admin",
             },
         }
-
-    @router.get("/ui", response_class=HTMLResponse, include_in_schema=False)
-    def task_console() -> HTMLResponse:
-        return HTMLResponse(
-            _CONSOLE_PAGE.read_text(encoding="utf-8"),
-            headers={
-                "Content-Security-Policy": (
-                    "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
-                    "connect-src 'self'; frame-ancestors 'self'"
-                ),
-            },
-        )
 
     @router.get("/health")
     def health() -> dict[str, Any]:
@@ -545,7 +546,7 @@ def resolve_ui_pages(
         if item.get("id") == "task-console":
             item.update({
                 "external": True,
-                "address": f"/{PLUGIN_ID}/ui",
+                "address": f"/{PLUGIN_ID}",
             })
         elif item.get("external"):
             item["address"] = str(item.get("descriptor") or "")

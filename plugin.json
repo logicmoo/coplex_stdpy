@@ -114,7 +114,7 @@
         "id": "task-console",
         "label": "LLM Task Harness",
         "kind": "task-console",
-        "descriptor": "/coplex_stdpy/ui",
+        "descriptor": "/coplex_stdpy",
         "external": true,
         "glyph": "⌘",
         "group": "RUNTIME"

@@ -66,7 +66,7 @@ Task execution is **disabled by default**. Enable it only after reviewing the
 effective policy (`executionEnabled` in the manifest/settings passed to
 `create_router()` / `HarnessTaskManager`).
 
-The task console (`/coplex_stdpy/ui`) is the live task console. It submits real
+The task console (`/coplex_stdpy`) is the live task console. It submits real
 tasks, lists durable state, shows ordered events, exposes pending approvals and
 human-input requests, and can cancel active work. It contains no sample task
 records or mock model output.
@@ -153,8 +153,8 @@ directly:
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| `GET` | `/coplex_stdpy` | Runtime summary and links |
-| `GET` | `/coplex_stdpy/ui` | Same-origin interactive task console |
+| `GET` | `/coplex_stdpy` | Same-origin interactive task console |
+| `GET` | `/coplex_stdpy/endpoints` | Runtime summary and links |
 | `GET` | `/coplex_stdpy/health` | Local readiness and task counts |
 | `GET` | `/coplex_stdpy/capabilities` | Tool schemas, risks, profiles, and features |
 | `GET` | `/coplex_stdpy/models` | Models from the configured provider |

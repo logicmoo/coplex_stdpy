@@ -116,8 +116,8 @@ All routes are mounted under the manifest's `routePrefix`
 
 | Method | Route | Maps to |
 |---|---|---|
-| `GET` | `/coplex_stdpy` | Plugin summary: execution/policy settings, per-status task counts, related links. |
-| `GET` | `/coplex_stdpy/ui` | Same-origin HTML task console (`static/console.html`), served with a restrictive CSP. |
+| `GET` | `/coplex_stdpy` | Same-origin HTML task console (`static/console.html`), served with a restrictive CSP. |
+| `GET` | `/coplex_stdpy/endpoints` | Plugin summary: execution/policy settings, per-status task counts, related links. |
 | `GET` | `/coplex_stdpy/health` | Liveness + active/stored task counts. |
 | `GET` | `/coplex_stdpy/capabilities` | `HarnessTaskManager.capabilities()` — tool schemas/risks, profiles, features, task states. |
 | `GET` | `/coplex_stdpy/models` | Proxies `OpenAICompatibleAdapter.list_models()` against the configured endpoint. |
@@ -143,7 +143,7 @@ constructed with.
 
 ## The task console (`static/console.html`)
 
-`GET /coplex_stdpy/ui` serves a small, dependency-free, dark-themed
+`GET /coplex_stdpy` serves a small, dependency-free, dark-themed
 single-page console (inline CSS/JS only, served with a CSP that only
 permits `'self'`) that drives the HTTP API above: it lists tasks with live
 status, lets an operator submit a new task (text, root, model, profile,
@@ -151,4 +151,5 @@ approval mode), polls `.../events?after=N` for ordered event streaming,
 and surfaces pending approvals/input requests with inline allow/deny and
 response controls plus a cancel button. It contains no sample task records
 or mocked output — everything it shows comes from the same HTTP surface
-any other client would use.
+any other client would use (it loads its own summary from
+`GET /coplex_stdpy/endpoints`).

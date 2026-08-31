@@ -210,7 +210,7 @@
     }
 
     async function loadSummary() {
-      const summary = await api("");
+      const summary = await api("/endpoints");
       executionEnabled = Boolean(summary.executionEnabled);
       byId("execution-badge").textContent = executionEnabled ? "execution enabled" : "execution disabled";
       byId("execution-badge").className = `badge ${executionEnabled ? "warn" : "ok"}`;

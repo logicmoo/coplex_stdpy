@@ -61,8 +61,39 @@ def test_create_router_works_standalone() -> None:
     router = server.create_router({"executionEnabled": False})
     paths = {route.path for route in router.routes}
     assert "/coplex_stdpy" in paths
+    assert "/coplex_stdpy/endpoints" in paths
     assert "/coplex_stdpy/health" in paths
     assert "/coplex_stdpy/tasks" in paths
+
+
+def test_bare_root_serves_console_and_endpoints_serves_summary() -> None:
+    """The bare mount root (``/coplex_stdpy``) must serve the HTML task
+    console, and the JSON runtime summary/links payload must have moved to
+    ``/coplex_stdpy/endpoints`` -- not the other way around.
+    """
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from coplex_stdpy import server
+
+    app = FastAPI()
+    app.include_router(server.create_router({"executionEnabled": False}))
+    with TestClient(app) as client:
+        console = client.get("/coplex_stdpy")
+        assert console.status_code == 200
+        assert "text/html" in console.headers["content-type"]
+        assert "<html" in console.text.lower()
+
+        endpoints = client.get("/coplex_stdpy/endpoints")
+        assert endpoints.status_code == 200
+        payload = endpoints.json()
+        assert payload["id"] == "coplex_stdpy"
+        assert payload["links"]["endpoints"] == "/coplex_stdpy/endpoints"
+        assert payload["links"]["ui"] == "/coplex_stdpy"
+
+        # The old /ui route is gone now that it moved to the bare root.
+        assert client.get("/coplex_stdpy/ui").status_code == 404
 
 
 def test_repository_root_defaults_to_cwd(monkeypatch) -> None:
